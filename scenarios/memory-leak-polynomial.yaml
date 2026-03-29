@@ -1,0 +1,152 @@
+# ============================================================
+# ML Pipeline Test - Memory Leak (Polynomial Regression)
+# Goal: Teach model to recognize exponential curves to predict crash
+# ============================================================
+
+name: "ML Pipeline - Memory Leak"
+description: "ML training scenario for polynomial regression - teaches exponential growth pattern prediction"
+otelCollectorEndpoint: "http://otel-collector:24318"
+
+projectVariables:
+  env: "production"
+  platform: "payment-system"
+  regions:
+    - us-west-2
+    - eu-central-1
+  mlAlgorithm: "polynomial"
+  predictionTarget: "oom_crash"
+
+services:
+
+  - name: "payment-processor"
+    description: "Payment processing worker - memory leak detection"
+    
+    serviceVariables:
+      serviceName: "payment-processor"
+      workerType: "nodejs"
+    
+    scenarios:
+
+      # BASELINE: Normal - 100MB flat memory, 150ms latency (Gaussian)
+      - name: "payment-normal-memory"
+        description: "Baseline: Normal payment processing - flat memory, healthy latency"
+        telemetryType: "unified"
+        
+        variables:
+          sessionId: "${uuid}"
+          traceId: "${traceId}"
+          orderId: "${randomInt(100000, 999999)}"
+          
+          # Distribution-based variables with ranges (referenced in metrics)
+          memoryUsage: { gaussian: { mean: 104857600, stdDev: 5242880 } }
+          latencyMs: { gaussian: { mean: 150, stdDev: 20 } }
+        
+        distribution:
+          type: "gaussian"
+          mean: 5
+          stdDev: 1
+        
+        params:
+          includeTraces: true
+          includeMetrics: true
+          includeLogs: true
+          correlationEnabled: false
+          rootSpan:
+            name: "POST /api/process_payment"
+            kind: "server"
+            statusCode: "OK"
+            attributes:
+              http.method: "POST"
+              http.target: "/api/process_payment"
+            childSpans: 2
+            durationMs: "${latencyMs}"
+          metrics:
+            - name: "process_memory_usage_bytes"
+              type: "gauge"
+              value: "${memoryUsage}"
+              labels:
+                service: "payment-processor"
+                type: "heap"
+            - name: "http_request_duration_ms"
+              type: "histogram"
+              value: "${latencyMs}"
+              labels:
+                endpoint: "/api/process_payment"
+          logs:
+            - severityNumber: 9
+              severityText: "Info"
+              body: "Payment processed successfully for order ${orderId}"
+        limits:
+          maxConcurrent: 3
+          maxPerHour: 1000
+
+      # ANOMALY: Exponential degradation - memory grows exponentially
+      - name: "payment-memory-leak"
+        description: "Anomaly: Memory leak with exponential growth - predicts OOM crash"
+        telemetryType: "unified"
+        
+        variables:
+          sessionId: "${uuid}"
+          traceId: "${traceId}"
+          orderId: "${randomInt(100000, 999999)}"
+          
+          # Distribution-based variables with growing ranges (referenced in metrics)
+          memoryUsage: { gaussian: { mean: 188743680, stdDev: 15728640 } }
+          latencyMs: { gaussian: { mean: 900, stdDev: 150 } }
+          gcPauseMs: { gaussian: { mean: 500, stdDev: 100 } }
+        
+        distribution:
+          type: "exponential"
+          startRate: 5
+          endRate: 50
+          growthFactor: 1.1
+        
+        params:
+          includeTraces: true
+          includeMetrics: true
+          includeLogs: true
+          correlationEnabled: false
+          rootSpan:
+            name: "POST /api/process_payment"
+            kind: "server"
+            statusCode: "OK"
+            attributes:
+              http.method: "POST"
+              http.target: "/api/process_payment"
+              degradation: true
+            childSpans: 2
+            durationMs: "${latencyMs}"
+          metrics:
+            - name: "process_memory_usage_bytes"
+              type: "gauge"
+              value: "${memoryUsage}"
+              labels:
+                service: "payment-processor"
+                type: "heap"
+                leak: true
+            - name: "http_request_duration_ms"
+              type: "histogram"
+              value: "${latencyMs}"
+              labels:
+                endpoint: "/api/process_payment"
+                status: "degraded"
+            - name: "gc_pause_time_ms"
+              type: "gauge"
+              value: "${gcPauseMs}"
+              labels:
+                reason: "out_of_memory"
+          logs:
+            - severityNumber: 9
+              severityText: "Info"
+              body: "Payment processed for order ${orderId}"
+              attributes:
+                latency: "degraded"
+            - severityNumber: 21
+              severityText: "Fatal"
+              body: "OutOfMemoryError: JavaScript heap out of memory"
+              attributes:
+                event: "oom_crash"
+                error: true
+        limits:
+          maxConcurrent: 3
+          maxPerHour: 1000

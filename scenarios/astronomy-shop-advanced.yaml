@@ -1,0 +1,1339 @@
+# ============================================================
+# ASTRONOMY SHOP - COMPREHENSIVE SYNTHETIC MONITORING
+# Using All Variable System Features
+# ============================================================
+
+name: "Astronomy Shop - Full Features"
+description: "Comprehensive synthetic monitoring showcasing all variable features: project/service/scenario variables, distribution objects, expression syntax"
+otelCollectorEndpoint: "http://otel-collector:24318"
+
+# ============================================================
+# PROJECT LEVEL VARIABLES
+# Accessible by all services and scenarios
+# ============================================================
+projectVariables:
+  # Environment
+  env: "production"
+  platform: "astronomy-shop"
+  
+  # API Configuration
+  apiBaseUrl: "https://api.astronomy-shop.com"
+  apiVersion: "v2"
+  
+  # Geographic Regions
+  regions:
+    - us-west-2
+    - us-east-1
+    - eu-central-1
+    - ap-southeast-1
+  
+  # User Types
+  userTypes:
+    - guest
+    - registered
+    - premium
+    - vip
+  
+  # Feature Flags
+  featureFlags:
+    enableCache: true
+    enableCircuitBreaker: true
+    enableRateLimiting: true
+  
+  # Performance Baselines
+  baselineMean: 100
+  baselineStdDev: 15
+  p95Threshold: 200
+  p99Threshold: 500
+
+services:
+
+  # ============================================================
+  # SERVICE: product-catalog
+  # Variables: Service-specific configs
+  # Scenarios: 10 scenarios using all variable features
+  # ============================================================
+  - name: "product-catalog"
+    description: "Product catalog service with full variable system usage"
+    
+    # Service level variables - accessible by all scenarios in this service
+    serviceVariables:
+      serviceName: "product-catalog"
+      cacheEnabled: true
+      maxProductsPerPage: 50
+      searchTimeout: 3000
+      
+    scenarios:
+
+      # Scenario 1: Browse with project-level variables
+      - name: "browse-products-global-vars"
+        description: "Browse products using global project variables for environment and regions"
+        telemetryType: "unified"
+        
+        # Scenario variables - highest priority
+        variables:
+          # Using project variables via expressions
+          sessionId: "${uuid}"
+          traceId: "${traceId}"
+          requestId: "${uuid}"
+          
+          # Static scenario variables
+          pageNumber: 1
+          productsPerPage: 20
+          
+          # Distribution-based variables using objects
+          cpuUsage: { gaussian: { mean: 45, stdDev: 10 } }
+          memoryUsage: { gaussian: { mean: 256, stdDev: 32 } }
+          responseTime: { gaussian: { mean: 120, stdDev: 25 } }
+          
+          # Using project variables
+          environment: "${env}"
+          platformName: "${platform}"
+          selectedRegion: "${randomChoice(regions)}"
+        
+        distribution:
+          type: "gaussian"
+          mean: "${baselineMean}"
+          stdDev: "${baselineStdDev}"
+        
+        params:
+          includeTraces: true
+          includeMetrics: true
+          includeLogs: true
+          correlationEnabled: true
+          rootSpan:
+            name: "ListProducts"
+            kind: "server"
+            statusCode: "OK"
+            attributes:
+              http.method: "GET"
+              http.route: "/products"
+              user.type: "${userTypes[0]}"
+              page.number: "${pageNumber}"
+              product.count: "${productsPerPage}"
+              cloud.region: "${selectedRegion}"
+            childSpans: 2
+            durationMs: 120
+          metrics:
+            - name: "product_catalog_requests_total"
+              type: "counter"
+              value: 1
+              unit: "1"
+              labels:
+                operation: "ListProducts"
+                region: "${selectedRegion}"
+            - name: "product_catalog_response_time_ms"
+              type: "histogram"
+              value: "${responseTime}"
+              unit: "ms"
+          logs:
+            - severityNumber: 9
+              severityText: "Info"
+              body: "Products listed successfully for session ${sessionId}"
+        limits:
+          maxConcurrent: 5
+          maxPerHour: 1000
+
+      # Scenario 2: Search with distribution objects
+      - name: "search-products-distributions"
+        description: "Search with various distribution patterns for realistic load simulation"
+        telemetryType: "unified"
+        
+        variables:
+          searchId: "${uuid}"
+          userId: "${randomInt(1000, 9999)}"
+          
+          # Gaussian distribution for search latency
+          searchLatencyMs: { gaussian: { mean: 85, stdDev: 20 } }
+          
+          # Uniform distribution for cache hit ratio
+          cacheHitRatio: { uniform: { min: 0.7, max: 0.95 } }
+          
+          # Exponential distribution for error simulation
+          errorRate: { exponential: { lambda: 0.05 } }
+          
+          # Random choice for search types
+          searchType: { randomChoice: ["keyword", "category", "featured", "recommended"] }
+          
+          # Boolean for feature flags
+          useCache: { randomBool: {} }
+        
+        distribution:
+          type: "gaussian"
+          mean: 100
+          stdDev: 10
+        
+        params:
+          includeTraces: true
+          includeMetrics: true
+          includeLogs: true
+          correlationEnabled: true
+          rootSpan:
+            name: "SearchProducts"
+            kind: "server"
+            statusCode: "OK"
+            attributes:
+              http.method: "GET"
+              http.route: "/products/search"
+              search.type: "${searchType}"
+              search.cache_hit: "${useCache}"
+              search.latency_ms: "${searchLatencyMs}"
+              cache.hit_ratio: "${cacheHitRatio}"
+            childSpans: 3
+            durationMs: 85
+          metrics:
+            - name: "search_requests_total"
+              type: "counter"
+              value: 1
+              unit: "1"
+              labels:
+                search_type: "${searchType}"
+            - name: "search_latency_ms"
+              type: "histogram"
+              value: "${searchLatencyMs}"
+              unit: "ms"
+            - name: "cache_operations_total"
+              type: "counter"
+              value: 1
+              unit: "1"
+              labels:
+                operation: "cache_get"
+                hit: "${useCache}"
+          logs:
+            - severityNumber: 9
+              severityText: "Info"
+              body: "Search completed: ${searchType} in ${searchLatencyMs}ms"
+        limits:
+          maxConcurrent: 3
+          maxPerHour: 500
+
+      # Scenario 3: Product detail with burst distribution
+      - name: "product-detail-burst-load"
+        description: "Product detail page simulating burst traffic patterns"
+        telemetryType: "unified"
+        
+        variables:
+          transactionId: "${uuid}"
+          timestamp: "${unixTimestamp}"
+          isoTime: "${isoTimestamp}"
+          
+          # Burst distribution for traffic spikes
+          requestLoad: { burst: { burstRate: 100, baseRate: 10 } }
+          
+          # Poisson for random events
+          recommendationCount: { poisson: { lambda: 5 } }
+          
+          # Random email for user notifications
+          userEmail: { randomEmail: {} }
+          
+          # Random name
+          customerName: { randomName: {} }
+        
+        distribution:
+          type: "burst"
+          burstRate: 100
+          baseRate: 10
+        
+        params:
+          includeTraces: true
+          includeMetrics: true
+          includeLogs: true
+          correlationEnabled: true
+          rootSpan:
+            name: "GetProductDetail"
+            kind: "server"
+            statusCode: "OK"
+            attributes:
+              http.method: "GET"
+              http.route: "/products/{id}"
+              product.id: "${randomInt(100, 9999)}"
+              user.email: "${userEmail}"
+              user.name: "${customerName}"
+              request.load: "${requestLoad}"
+              recommendations.count: "${recommendationCount}"
+            childSpans: 4
+            durationMs: 150
+          metrics:
+            - name: "product_detail_requests_total"
+              type: "counter"
+              value: 1
+              unit: "1"
+              labels:
+                operation: "GetProductDetail"
+            - name: "recommendations_generated_total"
+              type: "counter"
+              value: "${recommendationCount}"
+              unit: "1"
+          logs:
+            - severityNumber: 9
+              severityText: "Info"
+              body: "Product detail viewed by ${customerName} at ${isoTime}"
+        limits:
+          maxConcurrent: 10
+          maxPerHour: 2000
+
+      # Scenario 4: Filter products with linear distribution
+      - name: "filter-products-linear-load"
+        description: "Filter products with linearly increasing load pattern"
+        telemetryType: "unified"
+        
+        variables:
+          filterId: "${uuid}"
+          
+          # Linear distribution for ramping load
+          loadFactor: { linear: { start: 1, end: 10 } }
+          
+          # Increment for request counting
+          requestIndex: { increment: {} }
+          
+          # Using service variables
+          maxProducts: "${maxProductsPerPage}"
+          timeout: "${searchTimeout}"
+        
+        distribution:
+          type: "linear"
+          startRate: 1
+          endRate: 10
+        
+        params:
+          includeTraces: true
+          includeMetrics: true
+          includeLogs: true
+          correlationEnabled: true
+          rootSpan:
+            name: "FilterProducts"
+            kind: "server"
+            statusCode: "OK"
+            attributes:
+              http.method: "POST"
+              http.route: "/products/filter"
+              filter.request_index: "${requestIndex}"
+              filter.load_factor: "${loadFactor}"
+              filter.max_products: "${maxProducts}"
+            childSpans: 2
+            durationMs: 200
+          metrics:
+            - name: "filter_requests_total"
+              type: "counter"
+              value: 1
+              unit: "1"
+              labels:
+                operation: "FilterProducts"
+                load_factor: "${loadFactor}"
+          logs:
+            - severityNumber: 9
+              severityText: "Info"
+              body: "Filter request #${requestIndex} with load factor ${loadFactor}"
+        limits:
+          maxConcurrent: 5
+          maxPerHour: 500
+
+      # Scenario 5: Category browsing with random user types
+      - name: "category-browse-user-variation"
+        description: "Category browsing with random user type selection"
+        telemetryType: "unified"
+        
+        variables:
+          browseId: "${uuid}"
+          
+          # Random user type from project variable array
+          userType: { randomChoice: ["${userTypes[0]}", "${userTypes[1]}", "${userTypes[2]}"] }
+          isPremium: { randomBool: {} }
+          
+          # Gaussian for latency
+          processingTime: { gaussian: { mean: 75, stdDev: 15 } }
+          
+          # Static values
+          categoryId: 123
+          sortBy: "price_asc"
+        
+        distribution:
+          type: "gaussian"
+          mean: 100
+          stdDev: 10
+        
+        params:
+          includeTraces: true
+          includeMetrics: true
+          includeLogs: true
+          correlationEnabled: true
+          rootSpan:
+            name: "BrowseCategory"
+            kind: "server"
+            statusCode: "OK"
+            attributes:
+              http.method: "GET"
+              http.route: "/categories/{id}/products"
+              category.id: "${categoryId}"
+              user.type: "${userType}"
+              user.premium: "${isPremium}"
+              sort.by: "${sortBy}"
+            childSpans: 2
+            durationMs: 75
+          metrics:
+            - name: "category_browse_requests_total"
+              type: "counter"
+              value: 1
+              unit: "1"
+              labels:
+                user_type: "${userType}"
+                is_premium: "${isPremium}"
+            - name: "category_browse_latency_ms"
+              type: "histogram"
+              value: "${processingTime}"
+              unit: "ms"
+          logs:
+            - severityNumber: 9
+              severityText: "Info"
+              body: "${userType} browsing category ${categoryId}"
+        limits:
+          maxConcurrent: 8
+          maxPerHour: 1000
+
+  # ============================================================
+  # SERVICE: cart
+  # Variables: Cart-specific configurations
+  # ============================================================
+  - name: "cart"
+    description: "Shopping cart service with cart-specific variables"
+    
+    serviceVariables:
+      serviceName: "cart"
+      maxCartItems: 50
+      cartTimeout: 5000
+      currency: "USD"
+    
+    scenarios:
+
+      # Scenario 6: Add to cart with comprehensive variables
+      - name: "add-to-cart-full-vars"
+        description: "Add item to cart using all variable types"
+        telemetryType: "unified"
+        
+        variables:
+          cartId: "${uuid}"
+          sessionId: "${uuid}"
+          userId: "${randomInt(10000, 99999)}"
+          
+          # Distributions
+          itemPrice: { gaussian: { mean: 299, stdDev: 50 } }
+          quantity: { randomInt: { min: 1, max: 5 } }
+          discountPercent: { uniform: { min: 0, max: 20 } }
+          
+          # Computed values
+          totalAmount: { gaussian: { mean: 299, stdDev: 50 } }
+          discount: { gaussian: { mean: 15, stdDev: 5 } }
+          
+          # Using service variables
+          maxItems: "${maxCartItems}"
+          cartCurrency: "${currency}"
+        
+        distribution:
+          type: "gaussian"
+          mean: 100
+          stdDev: 15
+        
+        params:
+          includeTraces: true
+          includeMetrics: true
+          includeLogs: true
+          correlationEnabled: true
+          rootSpan:
+            name: "AddToCart"
+            kind: "server"
+            statusCode: "OK"
+            attributes:
+              http.method: "POST"
+              http.route: "/cart/items"
+              cart.id: "${cartId}"
+              session.id: "${sessionId}"
+              user.id: "${userId}"
+              item.price: "${itemPrice}"
+              item.quantity: "${quantity}"
+              discount.percent: "${discountPercent}"
+              cart.currency: "${cartCurrency}"
+            childSpans: 3
+            durationMs: 100
+          metrics:
+            - name: "cart_add_requests_total"
+              type: "counter"
+              value: 1
+              unit: "1"
+              labels:
+                operation: "AddToCart"
+            - name: "cart_item_value_total"
+              type: "counter"
+              value: "${itemPrice}"
+              unit: "USD"
+          logs:
+            - severityNumber: 9
+              severityText: "Info"
+              body: "Added ${quantity} items to cart ${cartId} for user ${userId}"
+        limits:
+          maxConcurrent: 10
+          maxPerHour: 5000
+
+      # Scenario 7: Update cart with burst patterns
+      - name: "update-cart-burst"
+        description: "Update cart with burst load for flash sale simulation"
+        telemetryType: "unified"
+        
+        variables:
+          updateId: "${uuid}"
+          timestamp: "${unixTimestamp}"
+          
+          # Burst for flash sale
+          requestBurst: { burst: { burstRate: 50, baseRate: 5 } }
+          
+          # Poisson for inventory checks
+          inventoryChecks: { poisson: { lambda: 3 } }
+          
+          # Random bool for promo code
+          hasPromoCode: { randomBool: {} }
+          
+          # First name for user
+          userFirstName: { firstName: {} }
+        
+        distribution:
+          type: "burst"
+          burstRate: 50
+          baseRate: 5
+        
+        params:
+          includeTraces: true
+          includeMetrics: true
+          includeLogs: true
+          correlationEnabled: true
+          rootSpan:
+            name: "UpdateCart"
+            kind: "server"
+            statusCode: "OK"
+            attributes:
+              http.method: "PUT"
+              http.route: "/cart/items/{id}"
+              cart.update_id: "${updateId}"
+              cart.promo_applied: "${hasPromoCode}"
+              inventory.checks: "${inventoryChecks}"
+              user.name: "${userFirstName}"
+            childSpans: 2
+            durationMs: 80
+          metrics:
+            - name: "cart_update_requests_total"
+              type: "counter"
+              value: 1
+              unit: "1"
+              labels:
+                promo_applied: "${hasPromoCode}"
+            - name: "inventory_check_calls_total"
+              type: "counter"
+              value: "${inventoryChecks}"
+              unit: "1"
+          logs:
+            - severityNumber: 9
+              severityText: "Info"
+              body: "Cart update by ${userFirstName} with ${inventoryChecks} inventory checks"
+        limits:
+          maxConcurrent: 20
+          maxPerHour: 3000
+
+      # Scenario 8: Checkout with exponential error simulation
+      - name: "checkout-exponential-load"
+        description: "Checkout process with exponential distribution for realistic error rates"
+        telemetryType: "unified"
+        
+        variables:
+          checkoutId: "${uuid}"
+          orderId: "${uuid}"
+          
+          # Exponential for checkout duration
+          checkoutDuration: { exponential: { lambda: 0.01 } }
+          
+          # Gaussian for payment processing
+          paymentTime: { gaussian: { mean: 500, stdDev: 100 } }
+          
+          # Random choice for payment method
+          paymentMethod: { randomChoice: ["credit_card", "debit_card", "paypal", "apple_pay"] }
+          
+          # Random email for receipt
+          receiptEmail: { randomEmail: {} }
+          
+          # User name
+          customerName: { randomName: {} }
+        
+        distribution:
+          type: "exponential"
+          lambda: 0.01
+        
+        params:
+          includeTraces: true
+          includeMetrics: true
+          includeLogs: true
+          correlationEnabled: true
+          rootSpan:
+            name: "Checkout"
+            kind: "server"
+            statusCode: "OK"
+            attributes:
+              http.method: "POST"
+              http.route: "/cart/checkout"
+              checkout.id: "${checkoutId}"
+              order.id: "${orderId}"
+              payment.method: "${paymentMethod}"
+              payment.time_ms: "${paymentTime}"
+              receipt.email: "${receiptEmail}"
+              customer.name: "${customerName}"
+            childSpans: 5
+            durationMs: 500
+          metrics:
+            - name: "checkout_requests_total"
+              type: "counter"
+              value: 1
+              unit: "1"
+              labels:
+                payment_method: "${paymentMethod}"
+            - name: "payment_processing_time_ms"
+              type: "histogram"
+              value: "${paymentTime}"
+              unit: "ms"
+          logs:
+            - severityNumber: 9
+              severityText: "Info"
+              body: "Checkout completed for ${customerName} - Order ${orderId}"
+        limits:
+          maxConcurrent: 5
+          maxPerHour: 500
+
+  # ============================================================
+  # SERVICE: checkout
+  # ============================================================
+  - name: "checkout"
+    description: "Checkout service with payment processing"
+    
+    serviceVariables:
+      serviceName: "checkout"
+      paymentTimeout: 30000
+      retryAttempts: 3
+      supportedCurrencies:
+        - USD
+        - EUR
+        - GBP
+    
+    scenarios:
+
+      # Scenario 9: Payment processing
+      - name: "process-payment"
+        description: "Payment processing with various distribution patterns"
+        telemetryType: "unified"
+        
+        variables:
+          paymentId: "${uuid}"
+          transactionId: "${traceId}"
+          
+          # Gaussian for payment amount
+          amount: { gaussian: { mean: 150, stdDev: 50 } }
+          
+          # Uniform for tax calculation
+          taxRate: { uniform: { min: 0.05, max: 0.10 } }
+          
+          # Calculated tax
+          taxAmount: { gaussian: { mean: 15, stdDev: 3 } }
+          
+          # Random choice for currency
+          currency: { randomChoice: ["${supportedCurrencies[0]}", "${supportedCurrencies[1]}", "${supportedCurrencies[2]}"] }
+          
+          # Random for success/failure simulation
+          paymentSuccess: { randomBool: {} }
+          
+          # Customer info
+          customerEmail: { randomEmail: {} }
+          customerName: { randomName: {} }
+        
+        distribution:
+          type: "gaussian"
+          mean: 100
+          stdDev: 10
+        
+        params:
+          includeTraces: true
+          includeMetrics: true
+          includeLogs: true
+          correlationEnabled: true
+          rootSpan:
+            name: "ProcessPayment"
+            kind: "server"
+            statusCode: "${paymentSuccess ? 'OK' : 'ERROR'}"
+            attributes:
+              http.method: "POST"
+              http.route: "/payments/process"
+              payment.id: "${paymentId}"
+              transaction.id: "${transactionId}"
+              payment.amount: "${amount}"
+              payment.currency: "${currency}"
+              payment.tax: "${taxAmount}"
+              payment.success: "${paymentSuccess}"
+              customer.email: "${customerEmail}"
+            childSpans: 4
+            durationMs: 300
+          metrics:
+            - name: "payment_requests_total"
+              type: "counter"
+              value: 1
+              unit: "1"
+              labels:
+                currency: "${currency}"
+                success: "${paymentSuccess}"
+            - name: "payment_amount_total"
+              type: "counter"
+              value: "${amount}"
+              unit: "${currency}"
+          logs:
+            - severityNumber: "${paymentSuccess ? 9 : 17}"
+              severityText: "${paymentSuccess ? 'Info' : 'Error'}"
+              body: "Payment ${paymentId} ${paymentSuccess ? 'processed' : 'failed'} for ${customerName}"
+        limits:
+          maxConcurrent: 10
+          maxPerHour: 2000
+
+      # Scenario 10: Order confirmation
+      - name: "order-confirmation"
+        description: "Order confirmation with full variable system"
+        telemetryType: "unified"
+        
+        variables:
+          orderId: "${uuid}"
+          confirmationId: "${uuid}"
+          timestamp: "${unixTimestamp}"
+          isoTimestamp: "${isoTimestamp}"
+          
+          # Gaussian for total
+          orderTotal: { gaussian: { mean: 250, stdDev: 75 } }
+          
+          # Items
+          itemCount: { randomInt: { min: 1, max: 10 } }
+          
+          # Shipping info
+          shippingCost: { uniform: { min: 5.99, max: 25.99 } }
+          
+          # User info
+          userEmail: { randomEmail: {} }
+          userName: { randomName: {} }
+          
+          # Random bool for express shipping
+          expressShipping: { randomBool: {} }
+        
+        distribution:
+          type: "gaussian"
+          mean: 100
+          stdDev: 10
+        
+        params:
+          includeTraces: true
+          includeMetrics: true
+          includeLogs: true
+          correlationEnabled: true
+          rootSpan:
+            name: "ConfirmOrder"
+            kind: "server"
+            statusCode: "OK"
+            attributes:
+              http.method: "POST"
+              http.route: "/orders/confirm"
+              order.id: "${orderId}"
+              confirmation.id: "${confirmationId}"
+              order.total: "${orderTotal}"
+              order.items: "${itemCount}"
+              shipping.cost: "${shippingCost}"
+              shipping.express: "${expressShipping}"
+              customer.email: "${userEmail}"
+              customer.name: "${userName}"
+              timestamp: "${timestamp}"
+            childSpans: 3
+            durationMs: 200
+          metrics:
+            - name: "order_confirmation_total"
+              type: "counter"
+              value: 1
+              unit: "1"
+              labels:
+                express_shipping: "${expressShipping}"
+            - name: "order_total_amount"
+              type: "histogram"
+              value: "${orderTotal}"
+              unit: "USD"
+          logs:
+            - severityNumber: 9
+              severityText: "Info"
+              body: "Order ${orderId} confirmed for ${userName} at ${isoTimestamp}"
+        limits:
+          maxConcurrent: 5
+          maxPerHour: 1000
+
+  # ============================================================
+  # SERVICE: recommendation
+  # Demonstrating advanced variable usage
+  # ============================================================
+  - name: "recommendation"
+    description: "Product recommendation service with advanced ML simulations"
+    
+    serviceVariables:
+      serviceName: "recommendation"
+      modelVersion: "v3.2.1"
+      maxRecommendations: 20
+      mlTimeout: 5000
+    
+    scenarios:
+
+      # Scenario 11: ML-based recommendations
+      - name: "ml-recommendations"
+        description: "ML-based product recommendations with Gaussian distributions"
+        telemetryType: "unified"
+        
+        variables:
+          requestId: "${uuid}"
+          sessionId: "${uuid}"
+          
+          # ML inference time (Gaussian)
+          mlInferenceTime: { gaussian: { mean: 120, stdDev: 30 } }
+          
+          # Number of recommendations (Poisson)
+          numRecommendations: { poisson: { lambda: 8 } }
+          
+          # Recommendation score (Gaussian)
+          avgScore: { gaussian: { mean: 0.75, stdDev: 0.15 } }
+          
+          # Model version from service variable
+          modelVer: "${modelVersion}"
+          
+          # User behavior
+          clickProbability: { uniform: { min: 0.1, max: 0.9 } }
+        
+        distribution:
+          type: "gaussian"
+          mean: 100
+          stdDev: 20
+        
+        params:
+          includeTraces: true
+          includeMetrics: true
+          includeLogs: true
+          correlationEnabled: true
+          rootSpan:
+            name: "GetRecommendations"
+            kind: "server"
+            statusCode: "OK"
+            attributes:
+              http.method: "GET"
+              http.route: "/recommendations"
+              request.id: "${requestId}"
+              session.id: "${sessionId}"
+              ml.model_version: "${modelVer}"
+              recommendations.count: "${numRecommendations}"
+              recommendations.avg_score: "${avgScore}"
+              ml.inference_time_ms: "${mlInferenceTime}"
+              user.click_probability: "${clickProbability}"
+            childSpans: 3
+            durationMs: 120
+          metrics:
+            - name: "recommendation_requests_total"
+              type: "counter"
+              value: 1
+              unit: "1"
+              labels:
+                model_version: "${modelVer}"
+            - name: "recommendation_count"
+              type: "histogram"
+              value: "${numRecommendations}"
+              unit: "1"
+            - name: "ml_inference_time_ms"
+              type: "histogram"
+              value: "${mlInferenceTime}"
+              unit: "ms"
+          logs:
+            - severityNumber: 9
+              severityText: "Info"
+              body: "Generated ${numRecommendations} recommendations in ${mlInferenceTime}ms"
+        limits:
+          maxConcurrent: 10
+          maxPerHour: 5000
+
+      # Scenario 12: Personalized recommendations
+      - name: "personalized-recommendations"
+        description: "Personalized recommendations based on user history"
+        telemetryType: "unified"
+        
+        variables:
+          requestId: "${uuid}"
+          
+          # User ID from expression
+          userId: "${randomInt(100000, 999999)}"
+          
+          # First name
+          userFirstName: { firstName: {} }
+          
+          # Recommendation latency
+          latency: { gaussian: { mean: 95, stdDev: 25 } }
+          
+          # Click through rate simulation
+          ctr: { uniform: { min: 0.05, max: 0.35 } }
+          
+          # Revenue per recommendation
+          revenuePerRec: { gaussian: { mean: 25, stdDev: 10 } }
+          
+          # Using service variable
+          maxRecs: "${maxRecommendations}"
+        
+        distribution:
+          type: "gaussian"
+          mean: 100
+          stdDev: 15
+        
+        params:
+          includeTraces: true
+          includeMetrics: true
+          includeLogs: true
+          correlationEnabled: true
+          rootSpan:
+            name: "GetPersonalizedRecommendations"
+            kind: "server"
+            statusCode: "OK"
+            attributes:
+              http.method: "GET"
+              http.route: "/recommendations/personalized"
+              user.id: "${userId}"
+              user.name: "${userFirstName}"
+              request.id: "${requestId}"
+              recommendations.max: "${maxRecs}"
+              recommendations.ctr: "${ctr}"
+              recommendations.revenue_per_rec: "${revenuePerRec}"
+            childSpans: 2
+            durationMs: 95
+          metrics:
+            - name: "personalized_rec_requests_total"
+              type: "counter"
+              value: 1
+              unit: "1"
+              labels:
+                user_segment: "active"
+            - name: "recommendation_ctr"
+              type: "gauge"
+              value: "${ctr}"
+              unit: "1"
+          logs:
+            - severityNumber: 9
+              severityText: "Info"
+              body: "Personalized recommendations for ${userFirstName} (${userId})"
+        limits:
+          maxConcurrent: 8
+          maxPerHour: 3000
+
+  # ============================================================
+  # SERVICE: shipping
+  # ============================================================
+  - name: "shipping"
+    description: "Shipping calculation and tracking service"
+    
+    serviceVariables:
+      serviceName: "shipping"
+      baseShippingCost: 5.99
+      expressMultiplier: 2.5
+    
+    scenarios:
+
+      # Scenario 13: Shipping cost calculation
+      - name: "calculate-shipping"
+        description: "Calculate shipping costs with various methods"
+        telemetryType: "unified"
+        
+        variables:
+          requestId: "${uuid}"
+          
+          # Weight-based cost (Gaussian)
+          packageWeight: { gaussian: { mean: 2.5, stdDev: 0.8 } }
+          
+          # Distance (Gaussian)
+          distanceKm: { gaussian: { mean: 500, stdDev: 150 } }
+          
+          # Shipping cost calculation
+          baseCost: { gaussian: { mean: 8.99, stdDev: 2 } }
+          
+          # Express multiplier from service variable
+          expressMult: { gaussian: { mean: 2.5, stdDev: 0.2 } }
+          
+          # Random shipping method
+          shippingMethod: { randomChoice: ["standard", "express", "overnight", "pickup"] }
+          
+          # Delivery estimate
+          deliveryDays: { randomInt: { min: 1, max: 7 } }
+        
+        distribution:
+          type: "gaussian"
+          mean: 100
+          stdDev: 10
+        
+        params:
+          includeTraces: true
+          includeMetrics: true
+          includeLogs: true
+          correlationEnabled: true
+          rootSpan:
+            name: "CalculateShipping"
+            kind: "server"
+            statusCode: "OK"
+            attributes:
+              http.method: "POST"
+              http.route: "/shipping/calculate"
+              request.id: "${requestId}"
+              package.weight_kg: "${packageWeight}"
+              shipping.distance_km: "${distanceKm}"
+              shipping.base_cost: "${baseCost}"
+              shipping.method: "${shippingMethod}"
+              shipping.delivery_days: "${deliveryDays}"
+            childSpans: 2
+            durationMs: 75
+          metrics:
+            - name: "shipping_calculation_total"
+              type: "counter"
+              value: 1
+              unit: "1"
+              labels:
+                method: "${shippingMethod}"
+            - name: "shipping_cost_total"
+              type: "counter"
+              value: "${baseCost}"
+              unit: "USD"
+          logs:
+            - severityNumber: 9
+              severityText: "Info"
+              body: "Shipping calculated for ${packageWeight}kg package to arrive in ${deliveryDays} days"
+        limits:
+          maxConcurrent: 5
+          maxPerHour: 2000
+
+  # ============================================================
+  # SERVICE: currency
+  # ============================================================
+  - name: "currency"
+    description: "Currency conversion service"
+    
+    serviceVariables:
+      serviceName: "currency"
+      supportedCurrencies:
+        - USD
+        - EUR
+        - GBP
+        - JPY
+        - CNY
+    
+    scenarios:
+
+      # Scenario 14: Currency conversion
+      - name: "convert-currency"
+        description: "Currency conversion with exchange rate simulation"
+        telemetryType: "unified"
+        
+        variables:
+          requestId: "${uuid}"
+          
+          # Source and target currencies
+          sourceCurrency: { randomChoice: ["USD", "EUR", "GBP"] }
+          targetCurrency: { randomChoice: ["JPY", "CNY", "USD"] }
+          
+          # Exchange rate (Gaussian around realistic values)
+          exchangeRate: { gaussian: { mean: 1.08, stdDev: 0.05 } }
+          
+          # Amount to convert
+          sourceAmount: { gaussian: { mean: 100, stdDev: 25 } }
+          
+          # Converted amount
+          targetAmount: { gaussian: { mean: 108, stdDev: 27 } }
+          
+          # Conversion fee
+          conversionFee: { uniform: { min: 0.5, max: 2.5 } }
+          
+          # Using service variable
+          supported: "${supportedCurrencies}"
+        
+        distribution:
+          type: "gaussian"
+          mean: 100
+          stdDev: 10
+        
+        params:
+          includeTraces: true
+          includeMetrics: true
+          includeLogs: true
+          correlationEnabled: true
+          rootSpan:
+            name: "ConvertCurrency"
+            kind: "server"
+            statusCode: "OK"
+            attributes:
+              http.method: "POST"
+              http.route: "/currency/convert"
+              request.id: "${requestId}"
+              currency.source: "${sourceCurrency}"
+              currency.target: "${targetCurrency}"
+              currency.exchange_rate: "${exchangeRate}"
+              currency.source_amount: "${sourceAmount}"
+              currency.target_amount: "${targetAmount}"
+              currency.fee: "${conversionFee}"
+            childSpans: 2
+            durationMs: 50
+          metrics:
+            - name: "currency_conversion_total"
+              type: "counter"
+              value: 1
+              unit: "1"
+              labels:
+                source: "${sourceCurrency}"
+                target: "${targetCurrency}"
+            - name: "conversion_amount_total"
+              type: "counter"
+              value: "${targetAmount}"
+              unit: "${targetCurrency}"
+          logs:
+            - severityNumber: 9
+              severityText: "Info"
+              body: "Converted ${sourceAmount} ${sourceCurrency} to ${targetAmount} ${targetCurrency}"
+        limits:
+          maxConcurrent: 10
+          maxPerHour: 5000
+
+  # ============================================================
+  # SERVICE: email
+  # ============================================================
+  - name: "email"
+    description: "Email notification service"
+    
+    serviceVariables:
+      serviceName: "email"
+      smtpHost: "smtp.astronomy-shop.com"
+      smtpPort: 587
+    
+    scenarios:
+
+      # Scenario 15: Send order confirmation email
+      - name: "send-order-email"
+        description: "Send order confirmation email with rich variable usage"
+        telemetryType: "unified"
+        
+        variables:
+          emailId: "${uuid}"
+          messageId: "${uuid}"
+          timestamp: "${unixTimestamp}"
+          isoTimestamp: "${isoTimestamp}"
+          
+          # Customer info
+          recipientEmail: { randomEmail: {} }
+          recipientName: { randomName: {} }
+          
+          # Email metrics
+          emailSizeKb: { gaussian: { mean: 25, stdDev: 8 } }
+          sendDuration: { gaussian: { mean: 250, stdDev: 75 } }
+          
+          # Retry simulation
+          smtpRetry: { randomInt: { min: 1, max: 3 } }
+          
+          # Success/failure
+          deliverySuccess: { randomBool: {} }
+          
+          # Using service variables
+          smtpHost: "${smtpHost}"
+          smtpPort: "${smtpPort}"
+        
+        distribution:
+          type: "gaussian"
+          mean: 100
+          stdDev: 20
+        
+        params:
+          includeTraces: true
+          includeMetrics: true
+          includeLogs: true
+          correlationEnabled: true
+          rootSpan:
+            name: "SendEmail"
+            kind: "client"
+            statusCode: "${deliverySuccess ? 'OK' : 'ERROR'}"
+            attributes:
+              http.method: "POST"
+              http.route: "/email/send"
+              email.id: "${emailId}"
+              email.message_id: "${messageId}"
+              email.to: "${recipientEmail}"
+              email.size_kb: "${emailSizeKb}"
+              smtp.host: "${smtpHost}"
+              smtp.port: "${smtpPort}"
+              smtp.retry_count: "${smtpRetry}"
+              email.success: "${deliverySuccess}"
+            childSpans: 2
+            durationMs: 250
+          metrics:
+            - name: "email_sent_total"
+              type: "counter"
+              value: 1
+              unit: "1"
+              labels:
+                status: "${deliverySuccess ? 'delivered' : 'failed'}"
+            - name: "email_size_bytes"
+              type: "histogram"
+              value: "${emailSizeKb}"
+              unit: "KB"
+          logs:
+            - severityNumber: "${deliverySuccess ? 9 : 17}"
+              severityText: "${deliverySuccess ? 'Info' : 'Error'}"
+              body: "Email ${emailId} ${deliverySuccess ? 'sent to' : 'failed for'} ${recipientName}"
+        limits:
+          maxConcurrent: 20
+          maxPerHour: 10000
+
+  # ============================================================
+  # SERVICE: product-reviews
+  # ============================================================
+  - name: "product-reviews"
+    description: "Product review and rating service"
+    
+    serviceVariables:
+      serviceName: "product-reviews"
+      maxReviewLength: 5000
+      moderationEnabled: true
+    
+    scenarios:
+
+      # Scenario 16: Submit product review
+      - name: "submit-review"
+        description: "Submit product review with rating distribution"
+        telemetryType: "unified"
+        
+        variables:
+          reviewId: "${uuid}"
+          
+          # Rating (Gaussian around 4 stars)
+          rating: { gaussian: { mean: 4.2, stdDev: 1.0 } }
+          
+          # Helpful votes
+          helpfulVotes: { poisson: { lambda: 5 } }
+          
+          # Review length
+          reviewLength: { uniform: { min: 50, max: 2000 } }
+          
+          # Reviewer info
+          reviewerName: { randomName: {} }
+          reviewerEmail: { randomEmail: {} }
+          
+          # Moderation
+          moderationScore: { uniform: { min: 0.7, max: 1.0 } }
+          
+          # Product ID
+          productId: { randomInt: { min: 1000, max: 9999 } }
+          
+          # Using service variable
+          maxLen: "${maxReviewLength}"
+        
+        distribution:
+          type: "gaussian"
+          mean: 100
+          stdDev: 15
+        
+        params:
+          includeTraces: true
+          includeMetrics: true
+          includeLogs: true
+          correlationEnabled: true
+          rootSpan:
+            name: "SubmitReview"
+            kind: "server"
+            statusCode: "OK"
+            attributes:
+              http.method: "POST"
+              http.route: "/reviews"
+              review.id: "${reviewId}"
+              review.rating: "${rating}"
+              review.helpful_votes: "${helpfulVotes}"
+              review.length: "${reviewLength}"
+              review.max_length: "${maxLen}"
+              reviewer.name: "${reviewerName}"
+              reviewer.email: "${reviewerEmail}"
+              product.id: "${productId}"
+              moderation.score: "${moderationScore}"
+              moderation.enabled: "${moderationEnabled}"
+            childSpans: 3
+            durationMs: 150
+          metrics:
+            - name: "review_submitted_total"
+              type: "counter"
+              value: 1
+              unit: "1"
+              labels:
+                rating_range: "4-5"
+            - name: "review_rating_histogram"
+              type: "histogram"
+              value: "${rating}"
+              unit: "stars"
+          logs:
+            - severityNumber: 9
+              severityText: "Info"
+              body: "Review ${reviewId} submitted by ${reviewerName} for product ${productId}"
+        limits:
+          maxConcurrent: 5
+          maxPerHour: 2000
+
+      # Scenario 17: Get product reviews
+      - name: "get-reviews"
+        description: "Get product reviews with pagination"
+        telemetryType: "unified"
+        
+        variables:
+          requestId: "${uuid}"
+          
+          # Pagination
+          pageNumber: { randomInt: { min: 1, max: 10 } }
+          reviewsPerPage: 10
+          
+          # Average rating
+          avgRating: { gaussian: { mean: 4.0, stdDev: 0.5 } }
+          
+          # Response time
+          responseTime: { gaussian: { mean: 65, stdDev: 15 } }
+          
+          # Product ID
+          productId: { randomInt: { min: 1000, max: 9999 } }
+        
+        distribution:
+          type: "gaussian"
+          mean: 100
+          stdDev: 10
+        
+        params:
+          includeTraces: true
+          includeMetrics: true
+          includeLogs: true
+          correlationEnabled: true
+          rootSpan:
+            name: "GetReviews"
+            kind: "server"
+            statusCode: "OK"
+            attributes:
+              http.method: "GET"
+              http.route: "/products/{id}/reviews"
+              request.id: "${requestId}"
+              product.id: "${productId}"
+              page.number: "${pageNumber}"
+              page.size: "${reviewsPerPage}"
+              reviews.avg_rating: "${avgRating}"
+            childSpans: 2
+            durationMs: 65
+          metrics:
+            - name: "reviews_fetched_total"
+              type: "counter"
+              value: 1
+              unit: "1"
+              labels:
+                page: "${pageNumber}"
+          logs:
+            - severityNumber: 9
+              severityText: "Info"
+              body: "Fetched reviews for product ${productId}, page ${pageNumber}"
+        limits:
+          maxConcurrent: 10
+          maxPerHour: 5000

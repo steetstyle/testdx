@@ -1,0 +1,161 @@
+# ============================================================
+# ML Pipeline Test - Redis Outage (NLP Classifier)
+# Goal: Teach model to detect sudden bursts of anomalous text patterns
+# ============================================================
+
+name: "ML Pipeline - Redis Outage"
+description: "ML training scenario for NLP classifier - detects anomalous log bursts and vocabulary shifts"
+otelCollectorEndpoint: "http://otel-collector:24318"
+
+projectVariables:
+  env: "production"
+  platform: "auth-system"
+  regions:
+    - us-west-2
+    - us-east-1
+  mlAlgorithm: "nlp_classifier"
+  detectionTarget: "log_burst"
+
+services:
+
+  - name: "auth-service"
+    description: "User authentication service - Redis cache detection"
+    
+    serviceVariables:
+      serviceName: "auth-service"
+      cacheType: "redis"
+    
+    scenarios:
+
+      # BASELINE: Normal - 50 logs/sec, INFO, "authentication successful" (Gaussian)
+      - name: "auth-normal-logs"
+        description: "Baseline: Normal auth requests - healthy rate, INFO level, success messages"
+        telemetryType: "unified"
+        
+        variables:
+          sessionId: "${uuid}"
+          traceId: "${traceId}"
+          tenantId: "${randomInt(1000, 9999)}"
+          
+          # Distribution-based variables with ranges (referenced in metrics)
+          latencyMs: { gaussian: { mean: 45, stdDev: 10 } }
+          poolSize: { gaussian: { mean: 10, stdDev: 1 } }
+        
+        distribution:
+          type: "gaussian"
+          mean: 50
+          stdDev: 5
+        
+        params:
+          includeTraces: true
+          includeMetrics: true
+          includeLogs: true
+          correlationEnabled: true
+          rootSpan:
+            name: "POST /api/auth/login"
+            kind: "server"
+            statusCode: "OK"
+            attributes:
+              http.method: "POST"
+              http.target: "/api/auth/login"
+              auth.method: "jwt"
+            childSpans: 2
+            durationMs: "${latencyMs}"
+          metrics:
+            - name: "auth_requests_total"
+              type: "counter"
+              value: 1
+              labels:
+                status: "success"
+                endpoint: "/api/auth/login"
+            - name: "redis_connection_pool_size"
+              type: "gauge"
+              value: "${poolSize}"
+              labels:
+                pool: "auth_cache"
+          logs:
+            - severityNumber: 9
+              severityText: "Info"
+              body: "User authentication successful for tenant_id: ${tenantId}"
+              attributes:
+                event: "auth_success"
+                status: "success"
+        limits:
+          maxConcurrent: 5
+          maxPerHour: 10000
+
+      # ANOMALY: Burst - 500 logs in 1ms, ERROR, new vocabulary
+      - name: "auth-redis-outage"
+        description: "Anomaly: Redis cache failure - burst of ERROR logs, new vocabulary"
+        telemetryType: "unified"
+        
+        variables:
+          sessionId: "${uuid}"
+          traceId: "${traceId}"
+          tenantId: "${randomInt(1000, 9999)}"
+          
+          # Distribution-based variables for degraded state (referenced in metrics)
+          latencyMs: { gaussian: { mean: 5000, stdDev: 500 } }
+          poolSize: { gaussian: { mean: 0, stdDev: 1 } }
+          failureRate: { gaussian: { mean: 100, stdDev: 5 } }
+        
+        distribution:
+          type: "burst"
+          burstRate: 500
+          baseRate: 0
+        
+        params:
+          includeTraces: true
+          includeMetrics: true
+          includeLogs: true
+          correlationEnabled: true
+          rootSpan:
+            name: "POST /api/auth/login"
+            kind: "server"
+            statusCode: "ERROR"
+            attributes:
+              http.method: "POST"
+              http.target: "/api/auth/login"
+              error: true
+              error.message: "RedisConnectionException: Timeout waiting for connection"
+            childSpans: 2
+            durationMs: "${latencyMs}"
+          metrics:
+            - name: "auth_requests_total"
+              type: "counter"
+              value: 0
+              labels:
+                status: "error"
+                endpoint: "/api/auth/login"
+            - name: "redis_connection_pool_size"
+              type: "gauge"
+              value: "${poolSize}"
+              labels:
+                pool: "auth_cache"
+                status: "exhausted"
+            - name: "auth_failure_rate"
+              type: "gauge"
+              value: "${failureRate}"
+              labels:
+                reason: "redis_timeout"
+          logs:
+            - severityNumber: 17
+              severityText: "Error"
+              body: "RedisConnectionException: Timeout waiting for connection from pool"
+              attributes:
+                event: "redis_connection_error"
+                error: true
+            - severityNumber: 17
+              severityText: "Error"
+              body: "RedisConnectionException: Connection refused"
+              attributes:
+                event: "redis_connection_refused"
+                error: true
+            - severityNumber: 17
+              severityText: "Error"
+              body: "Connection pool exhausted, max size: 10, active: 10, waiting: 50"
+              attributes:
+                event: "pool_exhausted"
+        limits:
+          maxConcurrent: 5
+          maxPerHour: 10000

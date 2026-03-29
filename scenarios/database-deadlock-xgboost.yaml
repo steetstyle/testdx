@@ -1,0 +1,140 @@
+# ============================================================
+# ML Pipeline Test - Database Deadlock (XGBoost / Deep Learning)
+# Goal: Teach model to cross-reference Logs, Metrics, Traces using shared trace_id
+# ============================================================
+
+name: "ML Pipeline - Database Deadlock"
+description: "ML training scenario for gradient boosting - teaches correlation between traces, metrics, and logs via trace_id"
+otelCollectorEndpoint: "http://otel-collector:24318"
+
+projectVariables:
+  env: "production"
+  platform: "ecommerce"
+  regions:
+    - us-west-2
+    - us-east-1
+  mlAlgorithm: "xgboost"
+  correlationTarget: "trace_id"
+
+services:
+
+  - name: "inventory-api"
+    description: "E-commerce inventory management service - deadlock detection"
+    
+    serviceVariables:
+      serviceName: "inventory-api"
+      dbSystem: "mysql"
+    
+    scenarios:
+
+      # BASELINE: Normal state - 50ms queries, 30% CPU (Gaussian)
+      - name: "inventory-update-normal"
+        description: "Baseline: Normal inventory UPDATE queries - healthy CPU, fast queries"
+        telemetryType: "unified"
+        
+        variables:
+          sessionId: "${uuid}"
+          traceId: "${traceId}"
+          tenantId: "${randomInt(1000, 9999)}"
+          
+          # Distribution-based variables with ranges (referenced in metrics)
+          queryDurationMs: { gaussian: { mean: 50, stdDev: 10 } }
+          cpuUsage: { gaussian: { mean: 30, stdDev: 5 } }
+        
+        distribution:
+          type: "gaussian"
+          mean: 10
+          stdDev: 2
+        
+        params:
+          includeTraces: true
+          includeMetrics: true
+          includeLogs: true
+          correlationEnabled: true
+          rootSpan:
+            name: "UPDATE inventory_stock"
+            kind: "server"
+            statusCode: "OK"
+            attributes:
+              db.system: "mysql"
+              db.operation: "UPDATE"
+              db.statement: "UPDATE inventory_stock SET quantity = ? WHERE product_id = ?"
+            childSpans: 1
+            durationMs: "${queryDurationMs}"
+          metrics:
+            - name: "cpu_usage_percent"
+              type: "gauge"
+              value: "${cpuUsage}"
+              labels:
+                service: "inventory-api"
+            - name: "db_query_duration_ms"
+              type: "histogram"
+              value: "${queryDurationMs}"
+              labels:
+                operation: "UPDATE"
+          logs:
+            - severityNumber: 9
+              severityText: "Info"
+              body: "Inventory updated for product ${randomInt(100, 9999)}"
+        limits:
+          maxConcurrent: 3
+          maxPerHour: 500
+
+      # ANOMALY: Deadlock - 8.5s timeout, 98% CPU, FATAL log
+      - name: "inventory-update-deadlock"
+        description: "Anomaly: Database deadlock - timeout, CPU spike, FATAL deadlock log"
+        telemetryType: "unified"
+        
+        variables:
+          sessionId: "${uuid}"
+          traceId: "${traceId}"
+          tenantId: "${randomInt(1000, 9999)}"
+          
+          # Distribution-based variables with ranges (referenced in metrics)
+          queryDurationMs: { gaussian: { mean: 8500, stdDev: 500 } }
+          cpuUsage: { gaussian: { mean: 98, stdDev: 2 } }
+        
+        distribution:
+          type: "gaussian"
+          mean: 10
+          stdDev: 2
+        
+        params:
+          includeTraces: true
+          includeMetrics: true
+          includeLogs: true
+          correlationEnabled: true
+          rootSpan:
+            name: "UPDATE inventory_stock"
+            kind: "server"
+            statusCode: "ERROR"
+            attributes:
+              db.system: "mysql"
+              db.operation: "UPDATE"
+              db.statement: "UPDATE inventory_stock SET quantity = ? WHERE product_id = ?"
+              error: true
+              error.message: "Lock wait timeout exceeded; try restarting transaction"
+            childSpans: 1
+            durationMs: "${queryDurationMs}"
+          metrics:
+            - name: "cpu_usage_percent"
+              type: "gauge"
+              value: "${cpuUsage}"
+              labels:
+                service: "inventory-api"
+            - name: "db_query_duration_ms"
+              type: "histogram"
+              value: "${queryDurationMs}"
+              labels:
+                operation: "UPDATE"
+                status: "timeout"
+          logs:
+            - severityNumber: 21
+              severityText: "Fatal"
+              body: "Transaction rollback: Deadlock found when trying to get lock; try restarting transaction"
+              attributes:
+                event: "database_deadlock"
+                db.system: "mysql"
+        limits:
+          maxConcurrent: 3
+          maxPerHour: 500

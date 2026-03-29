@@ -1,0 +1,339 @@
+# ============================================================
+# BASELINE vs OUTLIER - SYNTHETIC MONITORING TEST
+# Purpose: Generate metrics that show different distributions
+# for HyperDX to detect anomalies
+# ============================================================
+
+name: "Baseline vs Outlier Test"
+description: "Generate baseline and outlier metrics to test anomaly detection. Baseline has normal p99 (~100ms), outlier has elevated p99 (~500ms)."
+otelCollectorEndpoint: "http://otel-collector:24318"
+
+projectVariables:
+  environment: "production"
+  region: "us-west-2"
+  service.name: "api-gateway"
+
+services:
+
+  # ============================================================
+  # BASELINE SERVICE
+  # Normal operation with gaussian distribution centered on 100ms
+  # ============================================================
+  - name: "baseline-service"
+    description: "Baseline service with normal response times"
+    serviceVariables:
+      scenario.type: "baseline"
+    otelSdkConfig:
+      logLevel: "info"
+      resource:
+        serviceName: "baseline-service"
+        attributes:
+          service.type: "baseline"
+      trace:
+        enabled: true
+        serviceName: "baseline-service"
+        protocol: "http"
+        endpoint: "http://otel-collector:24318"
+      metric:
+        enabled: true
+        serviceName: "baseline-service"
+        protocol: "http"
+        endpoint: "http://otel-collector:24318"
+        temporality: "cumulative"
+      log:
+        enabled: true
+        serviceName: "baseline-service"
+        protocol: "http"
+        endpoint: "http://otel-collector:24318"
+
+    scenarios:
+
+      - name: "baseline-http-request"
+        description: "Baseline HTTP request - normal distribution around 100ms"
+        telemetryType: "unified"
+        params:
+          includeTraces: true
+          includeMetrics: true
+          includeLogs: false
+          correlationEnabled: true
+          rootSpan:
+            name: "HTTP GET /api/users"
+            kind: "server"
+            statusCode: "Ok"
+            attributes:
+              http.method: "GET"
+              http.route: "/api/users"
+              http.duration_ms: "${gaussian}"
+              scenario.type: "baseline"
+            childSpans: 2
+            durationMs: 100
+          metrics:
+            - name: "http_request_duration_ms"
+              type: "histogram"
+              value: "${gaussian}"
+              unit: "ms"
+              labels:
+                operation: "get_users"
+                scenario.type: "baseline"
+            - name: "http_requests_total"
+              type: "counter"
+              value: 1
+              unit: "1"
+              labels:
+                operation: "get_users"
+                status: "success"
+        distribution:
+          type: "gaussian"
+          mean: 100
+          stdDev: 20
+          rate: 10
+          interval: "1s"
+          duration: 120
+        limits:
+          maxConcurrent: 5
+          maxPerHour: 1000
+
+      - name: "baseline-db-query"
+        description: "Baseline DB query - normal distribution around 50ms"
+        telemetryType: "unified"
+        params:
+          includeTraces: true
+          includeMetrics: true
+          includeLogs: false
+          correlationEnabled: true
+          rootSpan:
+            name: "SELECT users"
+            kind: "client"
+            statusCode: "Ok"
+            attributes:
+              db.system: "postgresql"
+              db.operation: "SELECT"
+              db.duration_ms: "${gaussian}"
+            childSpans: 0
+            durationMs: 50
+          metrics:
+            - name: "db_query_duration_ms"
+              type: "histogram"
+              value: "${gaussian}"
+              unit: "ms"
+              labels:
+                db.system: "postgresql"
+                scenario.type: "baseline"
+        distribution:
+          type: "gaussian"
+          mean: 50
+          stdDev: 10
+          rate: 10
+          interval: "1s"
+          duration: 120
+        limits:
+          maxConcurrent: 5
+          maxPerHour: 1000
+
+  # ============================================================
+  # OUTLIER SERVICE
+  # Elevated latency with gaussian distribution centered on 500ms
+  # This simulates a problematic service that needs investigation
+  # ============================================================
+  - name: "outlier-service"
+    description: "Outlier service with elevated response times"
+    serviceVariables:
+      scenario.type: "outlier"
+    otelSdkConfig:
+      logLevel: "info"
+      resource:
+        serviceName: "outlier-service"
+        attributes:
+          service.type: "outlier"
+      trace:
+        enabled: true
+        serviceName: "outlier-service"
+        protocol: "http"
+        endpoint: "http://otel-collector:24318"
+      metric:
+        enabled: true
+        serviceName: "outlier-service"
+        protocol: "http"
+        endpoint: "http://otel-collector:24318"
+        temporality: "cumulative"
+      log:
+        enabled: true
+        serviceName: "outlier-service"
+        protocol: "http"
+        endpoint: "http://otel-collector:24318"
+
+    scenarios:
+
+      - name: "outlier-http-request"
+        description: "Outlier HTTP request - elevated distribution around 500ms"
+        telemetryType: "unified"
+        params:
+          includeTraces: true
+          includeMetrics: true
+          includeLogs: false
+          correlationEnabled: true
+          rootSpan:
+            name: "HTTP GET /api/orders"
+            kind: "server"
+            statusCode: "Ok"
+            attributes:
+              http.method: "GET"
+              http.route: "/api/orders"
+              http.duration_ms: "${gaussian}"
+              scenario.type: "outlier"
+            childSpans: 3
+            durationMs: 500
+          metrics:
+            - name: "http_request_duration_ms"
+              type: "histogram"
+              value: "${gaussian}"
+              unit: "ms"
+              labels:
+                operation: "get_orders"
+                scenario.type: "outlier"
+            - name: "http_requests_total"
+              type: "counter"
+              value: 1
+              unit: "1"
+              labels:
+                operation: "get_orders"
+                status: "success"
+        distribution:
+          type: "gaussian"
+          mean: 500
+          stdDev: 100
+          rate: 10
+          interval: "1s"
+          duration: 120
+        limits:
+          maxConcurrent: 5
+          maxPerHour: 1000
+
+      - name: "outlier-db-query"
+        description: "Outlier DB query - elevated distribution around 250ms"
+        telemetryType: "unified"
+        params:
+          includeTraces: true
+          includeMetrics: true
+          includeLogs: false
+          correlationEnabled: true
+          rootSpan:
+            name: "SELECT orders"
+            kind: "client"
+            statusCode: "Ok"
+            attributes:
+              db.system: "postgresql"
+              db.operation: "SELECT"
+              db.duration_ms: "${gaussian}"
+            childSpans: 1
+            durationMs: 250
+          metrics:
+            - name: "db_query_duration_ms"
+              type: "histogram"
+              value: "${gaussian}"
+              unit: "ms"
+              labels:
+                db.system: "postgresql"
+                scenario.type: "outlier"
+        distribution:
+          type: "gaussian"
+          mean: 250
+          stdDev: 50
+          rate: 10
+          interval: "1s"
+          duration: 120
+        limits:
+          maxConcurrent: 5
+          maxPerHour: 1000
+
+  # ============================================================
+  # HISTORICAL BACKFILL TEST
+  # Generate historical data for past week to test historical mode
+  # ============================================================
+  - name: "historical-service"
+    description: "Service for testing historical data backfill"
+    otelSdkConfig:
+      logLevel: "info"
+      resource:
+        serviceName: "historical-service"
+        attributes:
+          service.type: "historical"
+      trace:
+        enabled: true
+        serviceName: "historical-service"
+        protocol: "http"
+        endpoint: "http://otel-collector:24318"
+      metric:
+        enabled: true
+        serviceName: "historical-service"
+        protocol: "http"
+        endpoint: "http://otel-collector:24318"
+        temporality: "cumulative"
+      log:
+        enabled: true
+        serviceName: "historical-service"
+        protocol: "http"
+        endpoint: "http://otel-collector:24318"
+
+    scenarios:
+
+      - name: "historical-metrics-backfill"
+        description: "Historical metrics backfill - last 7 days"
+        telemetryType: "metrics"
+        params:
+          metrics:
+            - name: "cpu_usage_percent"
+              type: "gauge"
+              value: "${gaussian}"
+              unit: "percent"
+              labels:
+                host: "server-01"
+            - name: "memory_usage_bytes"
+              type: "gauge"
+              value: "${gaussian}"
+              unit: "bytes"
+              labels:
+                host: "server-01"
+        distribution:
+          type: "gaussian"
+          mean: 65
+          stdDev: 15
+          rate: 1
+          interval: "1m"
+          startDate: "2026-03-21T00:00:00Z"
+          endDate: "2026-03-28T00:00:00Z"
+        limits:
+          maxConcurrent: 1
+          maxPerHour: 100
+
+      - name: "historical-requests-backfill"
+        description: "Historical requests - last 3 days"
+        telemetryType: "unified"
+        params:
+          includeTraces: true
+          includeMetrics: true
+          includeLogs: false
+          correlationEnabled: false
+          rootSpan:
+            name: "HTTP Request"
+            kind: "server"
+            statusCode: "Ok"
+            attributes:
+              http.method: "GET"
+              http.route: "/api/data"
+            childSpans: 1
+            durationMs: 75
+          metrics:
+            - name: "api_requests_total"
+              type: "counter"
+              value: 1
+              unit: "1"
+        distribution:
+          type: "uniform"
+          rate: 60
+          interval: "1m"
+          startDate: "2026-03-25T00:00:00Z"
+          endDate: "2026-03-28T00:00:00Z"
+        limits:
+          maxConcurrent: 1
+          maxPerHour: 5000

@@ -1,0 +1,43 @@
+# ============================================================
+# Simple Test Scenario - No Variables
+# ============================================================
+
+name: "Simple Test"
+description: "Simple test without variable expressions"
+otelCollectorEndpoint: "http://otel-collector:24318"
+
+projectVariables:
+  env: "test"
+
+services:
+
+  - name: "test-service"
+    description: "Test service"
+    
+    serviceVariables:
+      serviceName: "test-service"
+    
+    scenarios:
+
+      - name: "simple-traces"
+        description: "Simple trace test"
+        telemetryType: "traces"
+        
+        variables:
+        
+        distribution:
+          type: "uniform"
+          rate: 10
+        
+        params:
+          rootSpan:
+            name: "test-operation"
+            kind: "server"
+            statusCode: "OK"
+            attributes:
+              test: "value"
+            childSpans: 1
+            durationMs: 100
+        limits:
+          maxConcurrent: 1
+          maxPerHour: 100
